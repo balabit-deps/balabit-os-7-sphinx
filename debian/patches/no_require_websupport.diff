@@ -1,0 +1,28 @@
+From: Dmitry Shachnev <mitya57@debian.org>
+Date: Mon, 7 Aug 2017 18:34:10 +0300
+Subject: Move sphinxcontrib-websupport to extras_require
+
+---
+ setup.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/setup.py b/setup.py
+index 0b3b128..2f8145a 100644
+--- a/setup.py
++++ b/setup.py
+@@ -51,7 +51,6 @@ requires = [
+     'imagesize',
+     'requests>=2.0.0',
+     'setuptools',
+-    'sphinxcontrib-websupport',
+ ]
+ 
+ extras_require = {
+@@ -63,6 +62,7 @@ extras_require = {
+         'typing'
+     ],
+     'websupport': [
++        'sphinxcontrib-websupport',
+         'sqlalchemy>=0.9',
+         'whoosh>=2.0',
+     ],

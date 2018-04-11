@@ -1,0 +1,261 @@
+From: Matthew Woodcraft <matthew@woodcraft.me.uk>
+Date: Sun, 5 Nov 2017 22:47:57 +0000
+Subject: Add optional section numbering in plain text output
+
+Controlled by new config values: text_add_secnumbers and
+text_secnumber_suffix.
+
+(cherry picked from commit 6b15c9c1c738c587a73b4144e8fe2b0d3b8aa4b4)
+---
+ doc/config.rst                           | 14 ++++++
+ sphinx/builders/text.py                  |  8 +++-
+ sphinx/writers/text.py                   | 20 +++++++-
+ tests/roots/test-build-text/contents.txt |  3 ++
+ tests/roots/test-build-text/doc1.txt     |  2 +
+ tests/roots/test-build-text/doc2.txt     |  9 ++++
+ tests/test_build_text.py                 | 80 ++++++++++++++++++++++++++++++++
+ 7 files changed, 133 insertions(+), 3 deletions(-)
+ create mode 100644 tests/roots/test-build-text/doc1.txt
+ create mode 100644 tests/roots/test-build-text/doc2.txt
+
+diff --git a/doc/config.rst b/doc/config.rst
+index 6b7690c..bc57999 100644
+--- a/doc/config.rst
++++ b/doc/config.rst
+@@ -2039,6 +2039,20 @@ These options influence text output.
+ 
+    .. versionadded:: 1.1
+ 
++.. confval:: text_add_secnumbers
++
++   A boolean that decides whether section numbers are included in text output.
++   Default is ``False``.
++
++   .. versionadded:: 1.7
++
++.. confval:: text_secnumber_suffix
++
++   Suffix for section numbers in text output.  Default: ``". "``. Set to ``" "``
++   to suppress the final dot on section numbers.
++
++   .. versionadded:: 1.7
++
+ 
+ .. _man-options:
+ 
+diff --git a/sphinx/builders/text.py b/sphinx/builders/text.py
+index 7b977b1..0bfb97f 100644
+--- a/sphinx/builders/text.py
++++ b/sphinx/builders/text.py
+@@ -21,7 +21,7 @@ from sphinx.writers.text import TextWriter, TextTranslator
+ 
+ if False:
+     # For type annotation
+-    from typing import Any, Dict, Iterator, Set  # NOQA
++    from typing import Any, Dict, Iterator, Set, Tuple  # NOQA
+     from docutils import nodes  # NOQA
+     from sphinx.application import Sphinx  # NOQA
+ 
+@@ -39,7 +39,8 @@ class TextBuilder(Builder):
+ 
+     def init(self):
+         # type: () -> None
+-        pass
++        # section numbers for headings in the currently visited document
++        self.secnumbers = {}  # type: Dict[unicode, Tuple[int, ...]]
+ 
+     def get_outdated_docs(self):
+         # type: () -> Iterator[unicode]
+@@ -72,6 +73,7 @@ class TextBuilder(Builder):
+     def write_doc(self, docname, doctree):
+         # type: (unicode, nodes.Node) -> None
+         self.current_docname = docname
++        self.secnumbers = self.env.toc_secnumbers.get(docname, {})
+         destination = StringOutput(encoding='utf-8')
+         self.writer.write(doctree, destination)
+         outfilename = path.join(self.outdir, os_path(docname) + self.out_suffix)
+@@ -93,6 +95,8 @@ def setup(app):
+ 
+     app.add_config_value('text_sectionchars', '*=-~"+`', 'env')
+     app.add_config_value('text_newlines', 'unix', 'env')
++    app.add_config_value('text_add_secnumbers', False, 'env')
++    app.add_config_value('text_secnumber_suffix', '. ', 'env')
+ 
+     return {
+         'version': 'builtin',
+diff --git a/sphinx/writers/text.py b/sphinx/writers/text.py
+index b6e3f4c..dda8030 100644
+--- a/sphinx/writers/text.py
++++ b/sphinx/writers/text.py
+@@ -183,6 +183,8 @@ class TextTranslator(nodes.NodeVisitor):
+         else:
+             self.nl = '\n'
+         self.sectionchars = builder.config.text_sectionchars
++        self.add_secnumbers = builder.config.text_add_secnumbers
++        self.secnumber_suffix = builder.config.text_secnumber_suffix
+         self.states = [[]]      # type: List[List[Tuple[int, Union[unicode, List[unicode]]]]]
+         self.stateindent = [0]
+         self.list_counter = []  # type: List[int]
+@@ -307,6 +309,17 @@ class TextTranslator(nodes.NodeVisitor):
+             raise nodes.SkipNode
+         self.new_state(0)
+ 
++    def get_section_number_string(self, node):
++        # type: (nodes.Node) -> unicode
++        if isinstance(node.parent, nodes.section):
++            anchorname = '#' + node.parent['ids'][0]
++            numbers = self.builder.secnumbers.get(anchorname)
++            if numbers is None:
++                numbers = self.builder.secnumbers.get('')
++            if numbers is not None:
++                return '.'.join(map(str, numbers)) + self.secnumber_suffix
++        return ''
++
+     def depart_title(self, node):
+         # type: (nodes.Node) -> None
+         if isinstance(node.parent, nodes.section):
+@@ -315,6 +328,8 @@ class TextTranslator(nodes.NodeVisitor):
+             char = '^'
+         text = None  # type: unicode
+         text = ''.join(x[1] for x in self.states.pop() if x[0] == -1)  # type: ignore
++        if self.add_secnumbers:
++            text = self.get_section_number_string(node) + text
+         self.stateindent.pop()
+         title = ['', text, '%s' % (char * column_width(text)), '']  # type: List[unicode]
+         if len(self.states) == 2 and len(self.states[-1]) == 0:
+@@ -987,7 +1002,10 @@ class TextTranslator(nodes.NodeVisitor):
+ 
+     def visit_reference(self, node):
+         # type: (nodes.Node) -> None
+-        pass
++        if self.add_secnumbers:
++            numbers = node.get("secnumber")
++            if numbers is not None:
++                self.add_text('.'.join(map(str, numbers)) + self.secnumber_suffix)
+ 
+     def depart_reference(self, node):
+         # type: (nodes.Node) -> None
+diff --git a/tests/roots/test-build-text/contents.txt b/tests/roots/test-build-text/contents.txt
+index 420d142..ca9f8dc 100644
+--- a/tests/roots/test-build-text/contents.txt
++++ b/tests/roots/test-build-text/contents.txt
+@@ -1,5 +1,8 @@
+ .. toctree::
++   :numbered:
+ 
++   doc1
++   doc2
+    maxwidth
+    lineblock
+    nonascii_title
+diff --git a/tests/roots/test-build-text/doc1.txt b/tests/roots/test-build-text/doc1.txt
+new file mode 100644
+index 0000000..da1909a
+--- /dev/null
++++ b/tests/roots/test-build-text/doc1.txt
+@@ -0,0 +1,2 @@
++Section A
++=========
+diff --git a/tests/roots/test-build-text/doc2.txt b/tests/roots/test-build-text/doc2.txt
+new file mode 100644
+index 0000000..ebc88e9
+--- /dev/null
++++ b/tests/roots/test-build-text/doc2.txt
+@@ -0,0 +1,9 @@
++Section B
++=========
++
++Sub Ba
++------
++
++Sub Bb
++------
++
+diff --git a/tests/test_build_text.py b/tests/test_build_text.py
+index 382e62b..553426e 100644
+--- a/tests/test_build_text.py
++++ b/tests/test_build_text.py
+@@ -111,3 +111,83 @@ def test_list_items_in_admonition(app, status, warning):
+     assert lines[2] == "  * item 1"
+     assert lines[3] == ""
+     assert lines[4] == "  * item 2"
++
++
++@with_text_app()
++def test_secnums(app, status, warning):
++    app.builder.build_all()
++    contents = (app.outdir / 'contents.txt').text(encoding='utf8')
++    lines = contents.splitlines()
++    assert lines[0] == "* Section A"
++    assert lines[1] == ""
++    assert lines[2] == "* Section B"
++    assert lines[3] == ""
++    assert lines[4] == "  * Sub Ba"
++    assert lines[5] == ""
++    assert lines[6] == "  * Sub Bb"
++    doc2 = (app.outdir / 'doc2.txt').text(encoding='utf8')
++    expect = (
++        "Section B\n"
++        "*********\n"
++        "\n"
++        "\n"
++        "Sub Ba\n"
++        "======\n"
++        "\n"
++        "\n"
++        "Sub Bb\n"
++        "======\n"
++    )
++    assert doc2 == expect
++
++    app.config.text_add_secnumbers = True
++    app.builder.build_all()
++    contents = (app.outdir / 'contents.txt').text(encoding='utf8')
++    lines = contents.splitlines()
++    assert lines[0] == "* 1. Section A"
++    assert lines[1] == ""
++    assert lines[2] == "* 2. Section B"
++    assert lines[3] == ""
++    assert lines[4] == "  * 2.1. Sub Ba"
++    assert lines[5] == ""
++    assert lines[6] == "  * 2.2. Sub Bb"
++    doc2 = (app.outdir / 'doc2.txt').text(encoding='utf8')
++    expect = (
++        "2. Section B\n"
++        "************\n"
++        "\n"
++        "\n"
++        "2.1. Sub Ba\n"
++        "===========\n"
++        "\n"
++        "\n"
++        "2.2. Sub Bb\n"
++        "===========\n"
++    )
++    assert doc2 == expect
++
++    app.config.text_secnumber_suffix = " "
++    app.builder.build_all()
++    contents = (app.outdir / 'contents.txt').text(encoding='utf8')
++    lines = contents.splitlines()
++    assert lines[0] == "* 1 Section A"
++    assert lines[1] == ""
++    assert lines[2] == "* 2 Section B"
++    assert lines[3] == ""
++    assert lines[4] == "  * 2.1 Sub Ba"
++    assert lines[5] == ""
++    assert lines[6] == "  * 2.2 Sub Bb"
++    doc2 = (app.outdir / 'doc2.txt').text(encoding='utf8')
++    expect = (
++        "2 Section B\n"
++        "***********\n"
++        "\n"
++        "\n"
++        "2.1 Sub Ba\n"
++        "==========\n"
++        "\n"
++        "\n"
++        "2.2 Sub Bb\n"
++        "==========\n"
++    )
++    assert doc2 == expect

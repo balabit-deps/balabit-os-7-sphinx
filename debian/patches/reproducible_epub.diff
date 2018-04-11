@@ -1,0 +1,71 @@
+From: "Bernhard M. Wiedemann" <bwiedemann@suse.de>
+Date: Tue, 1 Aug 2017 07:26:06 +0200
+Subject: epub: use format-date, sort manifest entries by filename
+
+(cherry picked from commit 5b4761e8277b71b3341335b8cf5e9691f9866c0a
+and commit 3164e27ca0638fbe212c15d47ef9662c4b42af9c)
+---
+ sphinx/builders/_epub_base.py | 5 +++--
+ sphinx/builders/epub3.py      | 4 ++--
+ 2 files changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/sphinx/builders/_epub_base.py b/sphinx/builders/_epub_base.py
+index b68fdba..a2530b1 100644
+--- a/sphinx/builders/_epub_base.py
++++ b/sphinx/builders/_epub_base.py
+@@ -12,8 +12,8 @@
+ import os
+ import re
+ from os import path
++from sphinx.util.i18n import format_date
+ from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
+-from datetime import datetime
+ from collections import namedtuple
+ 
+ try:
+@@ -486,7 +486,7 @@ class EpubBuilder(StandaloneHTMLBuilder):
+         metadata['copyright'] = self.esc(self.config.epub_copyright)
+         metadata['scheme'] = self.esc(self.config.epub_scheme)
+         metadata['id'] = self.esc(self.config.epub_identifier)
+-        metadata['date'] = self.esc(datetime.utcnow().strftime("%Y-%m-%d"))
++        metadata['date'] = self.esc(format_date("%Y-%m-%d"))
+         metadata['manifest_items'] = []
+         metadata['spines'] = []
+         metadata['guides'] = []
+@@ -513,6 +513,7 @@ class EpubBuilder(StandaloneHTMLBuilder):
+         if not self.use_index:
+             self.ignored_files.append('genindex' + self.out_suffix)
+         for root, dirs, files in os.walk(outdir):
++            dirs.sort()
+             for fn in sorted(files):
+                 filename = path.join(root, fn)[olen:]
+                 if filename in self.ignored_files:
+diff --git a/sphinx/builders/epub3.py b/sphinx/builders/epub3.py
+index fb2a71b..47ef94f 100644
+--- a/sphinx/builders/epub3.py
++++ b/sphinx/builders/epub3.py
+@@ -11,7 +11,6 @@
+ """
+ 
+ from os import path
+-from datetime import datetime
+ from collections import namedtuple
+ 
+ from sphinx import package_dir
+@@ -19,6 +18,7 @@ from sphinx.config import string_classes, ENUM
+ from sphinx.builders import _epub_base
+ from sphinx.util import logging, xmlname_checker
+ from sphinx.util.fileutil import copy_asset_file
++from sphinx.util.i18n import format_date
+ 
+ if False:
+     # For type annotation
+@@ -129,7 +129,7 @@ class Epub3Builder(_epub_base.EpubBuilder):
+         metadata['contributor'] = self.esc(self.config.epub_contributor)
+         metadata['page_progression_direction'] = PAGE_PROGRESSION_DIRECTIONS.get(writing_mode)
+         metadata['ibook_scroll_axis'] = IBOOK_SCROLL_AXIS.get(writing_mode)
+-        metadata['date'] = self.esc(datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"))
++        metadata['date'] = self.esc(format_date("%Y-%m-%dT%H:%M:%SZ"))
+         metadata['version'] = self.esc(self.config.version)
+         return metadata
+ 

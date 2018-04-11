@@ -1,0 +1,7 @@
+no_external_css.diff
+disable_js_version_check.diff
+no_snowballstemmer.diff
+skip_tests_network.diff
+no_require_websupport.diff
+reproducible_epub.diff
+text_section_numbering.diff
